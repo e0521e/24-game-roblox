@@ -16,18 +16,15 @@ local Promise = require(ReplicatedStorage.Packages.Promise)
 local Observers = require(ReplicatedStorage.Packages.Observers)
 
 --- 3 已方
-local PlayerDataServer, PlayerDataClient, Icon
 local Config = require(ReplicatedStorage.Shared.Configuration.Config)
 local Utils = require(ReplicatedStorage.Shared.DataStructures.Utils)
 local EventBus = require(ReplicatedStorage.Shared.DataStructures.EventBus)
 local Icon, localPlayer, PlayerGui
+local PlayerData = require(ReplicatedStorage.Shared.DataStructures.PlayerData)
 
 if Config.isClient then
 	Icon = require(ReplicatedStorage.Packages.Topbarplus)
-	PlayerDataClient = require(ReplicatedStorage.Myblox.PurchaseHandling.PlayerData.Client)
 	localPlayer = Players.LocalPlayer
-elseif Config.isServer then
-	PlayerDataServer = require(ReplicatedStorage.Myblox.PurchaseHandling.PlayerData.Server)
 end
 
 --- 4.1. Tree
@@ -112,8 +109,7 @@ local U3 = {
 	['Constants'] = Constants,
 	['Utils'] = Utils,
 	['EventBus'] = EventBus,
-	['PlayerDataClient'] = PlayerDataClient,
-	['PlayerDataServer'] = PlayerDataServer,
+	['PlayerData'] = PlayerData,
 	['F'] = nil,
 }
 
