@@ -23,7 +23,7 @@ local Icon, localPlayer, PlayerGui
 local PlayerData = require(ReplicatedStorage.Shared.DataStructures.PlayerData)
 
 if Config.isClient then
-	Icon = require(ReplicatedStorage.Packages.Topbarplus)
+	--- Icon = require(ReplicatedStorage.Packages.Topbarplus)
 	localPlayer = Players.LocalPlayer
 end
 

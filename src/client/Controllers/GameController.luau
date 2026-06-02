@@ -14,6 +14,7 @@ local player = Players.LocalPlayer
 	local panel, cardSlots, cardBtns, skillSlots
 local startBtn, submitBtn, nextBtn, exitBtn, panelTitle
 local resultFrame, formulaLabel, resultStatus, nextBtn
+local commentScroll, commentInput, commentList
 local selectedCard = nil
 local selectedSkill = nil
 local currentQuestion = nil
@@ -154,6 +155,41 @@ local function submitAnswer()
 	end
 end
 
+local function loadComments(comments)
+	for _, child in commentScroll:GetChildren() do
+		if child:IsA("TextLabel") then
+			child:Destroy()
+		end
+	end
+
+	if type(comments) ~= "table" or #comments == 0 then
+		local empty = Instance.new("TextLabel")
+		empty.Size = UDim2.new(1, -8, 0, 20)
+		empty.Position = UDim2.fromOffset(4, 4)
+		empty.BackgroundTransparency = 1
+		empty.Text = "暂无评论"
+		empty.TextColor3 = Color3.fromRGB(100, 100, 130)
+		empty.TextSize = 13
+		empty.Font = Enum.Font.Gotham
+		empty.TextXAlignment = Enum.TextXAlignment.Left
+		empty.Parent = commentScroll
+		return
+	end
+
+	for i, c in comments do
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.new(1, -8, 0, 20)
+		label.BackgroundTransparency = 1
+		label.Text = c.PlayerName .. ": " .. c.Text
+		label.TextColor3 = Color3.fromRGB(255, 255, 255)
+		label.TextSize = 13
+		label.Font = Enum.Font.Gotham
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.LayoutOrder = i
+		label.Parent = commentScroll
+	end
+end
+
 local function startNewQuestion()
 	local floorNum = currentFloor
 	if not floorNum then
@@ -200,6 +236,14 @@ local function startNewQuestion()
 
 	submitBtn.Text = (floorNum == 1) and "通过 (24)" or "通过"
 	submitBtn.BackgroundTransparency = 0.2
+
+	local commentService = Knit.GetService("CommentService")
+	local res, comments = pcall(function()
+		return commentService:GetComments(floorNum):expect()
+	end)
+	if res and comments then
+		loadComments(comments)
+	end
 end
 
 local function createUI()
@@ -214,14 +258,14 @@ local function createUI()
 
 	startBtn = Instance.new("TextButton")
 	startBtn.Name = "StartBtn"
-	startBtn.Size = UDim2.fromOffset(160, 44)
-	startBtn.Position = UDim2.new(0.5, -80, 0.5, -22)
+	startBtn.Size = UDim2.fromOffset(56, 40)
+	startBtn.Position = UDim2.new(1, -60, 0.5, -66)
 	startBtn.BackgroundColor3 = Color3.fromRGB(50, 150, 255)
-	startBtn.BackgroundTransparency = 0.2
+	startBtn.BackgroundTransparency = 0.15
 	startBtn.BorderSizePixel = 0
-	startBtn.Text = "开始答题"
+	startBtn.Text = "答题"
 	startBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	startBtn.TextSize = 20
+	startBtn.TextSize = 16
 	startBtn.Font = Enum.Font.GothamBold
 	startBtn.Parent = gui
 
@@ -231,8 +275,8 @@ local function createUI()
 
 	panel = Instance.new("Frame")
 	panel.Name = "QuestionPanel"
-	panel.Size = UDim2.fromOffset(560, 340)
-	panel.Position = UDim2.new(0.5, -280, 0.5, -170)
+	panel.Size = UDim2.fromOffset(560, 420)
+	panel.Position = UDim2.new(0.5, -280, 0.5, -210)
 	panel.BackgroundColor3 = Color3.fromRGB(18, 18, 34)
 	panel.BackgroundTransparency = 0.1
 	panel.BorderSizePixel = 0
@@ -409,6 +453,97 @@ local function createUI()
 	formulaLabel.Parent = resultFrame
 
 	resultStatus = formulaLabel
+
+	-- Comment section
+	local commentLabel = Instance.new("TextLabel")
+	commentLabel.Size = UDim2.fromOffset(100, 18)
+	commentLabel.Position = UDim2.fromOffset(startX, 254)
+	commentLabel.BackgroundTransparency = 1
+	commentLabel.Text = "玩家评论:"
+	commentLabel.TextColor3 = Color3.fromRGB(180, 180, 200)
+	commentLabel.TextSize = 12
+	commentLabel.Font = Enum.Font.Gotham
+	commentLabel.TextXAlignment = Enum.TextXAlignment.Left
+	commentLabel.Parent = panel
+
+	commentScroll = Instance.new("ScrollingFrame")
+	commentScroll.Size = UDim2.new(1, -(startX * 2 + 4), 0, 64)
+	commentScroll.Position = UDim2.fromOffset(startX, 274)
+	commentScroll.BackgroundColor3 = Color3.fromRGB(22, 22, 40)
+	commentScroll.BackgroundTransparency = 0.4
+	commentScroll.BorderSizePixel = 0
+	commentScroll.ScrollBarThickness = 4
+	commentScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+	commentScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+	commentScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	commentScroll.Parent = panel
+
+	local cCorner = Instance.new("UICorner")
+	cCorner.CornerRadius = UDim.new(0, 6)
+	cCorner.Parent = commentScroll
+
+	commentList = Instance.new("UIListLayout")
+	commentList.Padding = UDim.new(0, 4)
+	commentList.SortOrder = Enum.SortOrder.LayoutOrder
+	commentList.Parent = commentScroll
+
+	local commentInputBg = Instance.new("Frame")
+	commentInputBg.Size = UDim2.new(1, -(startX * 2 + 4), 0, 28)
+	commentInputBg.Position = UDim2.fromOffset(startX, 342)
+	commentInputBg.BackgroundColor3 = Color3.fromRGB(22, 22, 40)
+	commentInputBg.BackgroundTransparency = 0.3
+	commentInputBg.BorderSizePixel = 0
+	commentInputBg.Parent = panel
+
+	local ciCorner = Instance.new("UICorner")
+	ciCorner.CornerRadius = UDim.new(0, 6)
+	ciCorner.Parent = commentInputBg
+
+	commentInput = Instance.new("TextBox")
+	commentInput.Size = UDim2.new(1, -52, 1, -2)
+	commentInput.Position = UDim2.fromOffset(4, 1)
+	commentInput.BackgroundTransparency = 1
+	commentInput.PlaceholderText = "输入评论..."
+	commentInput.PlaceholderColor3 = Color3.fromRGB(120, 120, 150)
+	commentInput.Text = ""
+	commentInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+	commentInput.TextSize = 14
+	commentInput.Font = Enum.Font.Gotham
+	commentInput.TextXAlignment = Enum.TextXAlignment.Left
+	commentInput.ClearTextOnFocus = false
+	commentInput.Parent = commentInputBg
+
+	local sendBtn = Instance.new("TextButton")
+	sendBtn.Size = UDim2.fromOffset(42, 28)
+	sendBtn.Position = UDim2.new(1, -42, 0, 0)
+	sendBtn.BackgroundColor3 = Color3.fromRGB(50, 150, 255)
+	sendBtn.BackgroundTransparency = 0.2
+	sendBtn.BorderSizePixel = 0
+	sendBtn.Text = "发送"
+	sendBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	sendBtn.TextSize = 12
+	sendBtn.Font = Enum.Font.GothamBold
+	sendBtn.Parent = commentInputBg
+
+	local sCorner2 = Instance.new("UICorner")
+	sCorner2.CornerRadius = UDim.new(0, 5)
+	sCorner2.Parent = sendBtn
+
+	sendBtn.MouseButton1Click:Connect(function()
+		local text = commentInput.Text
+		if #text > 0 then
+			local service = Knit.GetService("CommentService")
+			local res, ok, comments = pcall(function()
+				return service:AddComment(currentFloor, text):expect()
+			end)
+			if res and ok then
+				commentInput.Text = ""
+				if comments then
+					loadComments(comments)
+				end
+			end
+		end
+	end)
 
 	-- Bottom button row
 	local BTN_W = 120

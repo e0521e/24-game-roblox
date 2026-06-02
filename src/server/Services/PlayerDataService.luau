@@ -6,6 +6,7 @@ local U3 = require(ReplicatedStorage.Shared.DataStructures.U3)
 local Knit = U3.Knit
 local PlayerDataModule = require(ReplicatedStorage.Shared.DataStructures.PlayerData)
 local OnlineRewards = require(ReplicatedStorage.Shared.constants.OnlineRewards)
+local SignInConfig = require(ReplicatedStorage.Shared.constants.SignInConfig)
 
 local DATASTORE_NAME = "PlayerData_24Game"
 local AUTOSAVE_INTERVAL = 60
@@ -32,7 +33,20 @@ function PlayerDataService.Client:ClaimDailySignIn(player)
 	if not PlayerDataModule.CanSignIn(data.SignInData) then
 		return false
 	end
+
 	data.SignInData = PlayerDataModule.ProcessSignIn(data.SignInData)
+	local day = data.SignInData.TotalSignInDays
+	local config = SignInConfig[day]
+
+	if config then
+		if config.Coins then
+			data.Coins = math.max(0, data.Coins + config.Coins)
+		end
+		if config.LevelUp then
+			data.PlayerLevel = config.LevelUp
+		end
+	end
+
 	PlayerDataService.Client.DataChanged:Fire(player, data)
 	return true
 end
@@ -42,13 +56,15 @@ function PlayerDataService.Client:GMUpdateData(player, kv)
 	if not data or type(kv) ~= "table" then
 		return false, "invalid"
 	end
-	local allowed = { Coins = true, Floor = true }
+	local allowed = { Coins = true, Floor = true, PlayerLevel = true }
 	for k, v in kv do
 		if allowed[k] then
 			if k == "Floor" then
 				data[k] = math.max(1, v)
 			elseif k == "Coins" then
 				data[k] = math.max(0, v)
+			elseif k == "PlayerLevel" then
+				data[k] = math.max(1, v)
 			end
 		end
 	end
@@ -110,6 +126,15 @@ function PlayerDataService:LoadPlayerData(player)
 		playerDataMap[userId] = data
 		if data.FirstJoinTime == 0 or not data.FirstJoinTime then
 			data.FirstJoinTime = os.time()
+		end
+		if not data.PlayerLevel then
+			data.PlayerLevel = 1
+		end
+		if not data.SignInData then
+			data.SignInData = { LastSignInDate = "", TotalSignInDays = 0 }
+		elseif data.SignInData.ConsecutiveDays then
+			data.SignInData.TotalSignInDays = data.SignInData.ConsecutiveDays
+			data.SignInData.ConsecutiveDays = nil
 		end
 		return data
 	end
