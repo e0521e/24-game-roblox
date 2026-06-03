@@ -7,6 +7,7 @@ realm = "shared"
 [dependencies]
 Knit = "sleitnick/knit@1.7.0"
 Component = "sleitnick/component@2.4.8"
+Silo = "sleitnick/silo@0.2.0"
 
 [server-dependencies]
 Component = "daimondnetwork/component@^2.0.0"

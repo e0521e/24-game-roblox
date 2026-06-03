@@ -5,6 +5,7 @@ local TweenService = game:GetService("TweenService")
 local U3 = require(ReplicatedStorage.Shared.DataStructures.U3)
 local Knit = U3.Knit
 local Questions = require(ReplicatedStorage.Shared.constants.Questions)
+local SkillCarks = require(ReplicatedStorage.Shared.constants.SkillCarks)
 
 local GameController = Knit.CreateController {
 	Name = "GameController",
@@ -20,14 +21,10 @@ local selectedSkill = nil
 local currentQuestion = nil
 local currentFloor = nil
 local submitCooldown = false
+local skillDisplayTable = {}
+local skillApplyTable = {}
+local skillContainer = nil
 
-local SKILL_DISPLAY = { "+1", "-1", "*2", "/2" }
-local SKILL_APPLY = {
-	function(v) return v + 1 end,
-	function(v) return v - 1 end,
-	function(v) return v * 2 end,
-	function(v) return math.floor(v / 2) end,
-}
 local CARD_COLORS = {
 	Color3.fromRGB(100, 150, 255),
 	Color3.fromRGB(100, 200, 150),
@@ -79,9 +76,9 @@ local function buildFormula(nums, cardIdx, skillIdx, total)
 	local parts = {}
 	for i, v in nums do
 		if cardIdx == i and skillIdx then
-			local skillFn = SKILL_APPLY[skillIdx]
+			local skillFn = skillApplyTable[skillIdx]
 			local newV = skillFn and skillFn(v) or v
-			table.insert(parts, tostring(v) .. "→" .. tostring(newV) .. "(" .. SKILL_DISPLAY[skillIdx] .. ")")
+			table.insert(parts, tostring(v) .. "→" .. tostring(newV) .. "(" .. skillDisplayTable[skillIdx] .. ")")
 		else
 			table.insert(parts, tostring(v))
 		end
@@ -121,7 +118,7 @@ local function submitAnswer()
 		total = total + v
 	end
 	if selectedCard and selectedSkill then
-		local skillFn = SKILL_APPLY[selectedSkill]
+		local skillFn = skillApplyTable[selectedSkill]
 		if skillFn then
 			total = total - nums[selectedCard] + skillFn(nums[selectedCard])
 		end
@@ -190,14 +187,102 @@ local function loadComments(comments)
 	end
 end
 
+local function buildSkillSlots()
+	if skillSlots then
+		for _, s in skillSlots do
+			if s then
+				s:Destroy()
+			end
+		end
+	end
+	skillSlots = {}
+
+	local count = #skillDisplayTable
+	if count == 0 or not skillContainer then
+		return
+	end
+	local availW = skillContainer.AbsoluteSize.X
+	if availW <= 0 then
+		availW = 400
+	end
+	local gap = (count <= 6) and 8 or 4
+	local slotW = math.max(38, math.min(60, math.floor((availW - (count - 1) * gap) / count)))
+
+	for i = 1, count do
+		local slot = Instance.new("Frame")
+		slot.Name = "SkillSlot_" .. i
+		slot.Size = UDim2.fromOffset(slotW, 36)
+		slot.BackgroundColor3 = Color3.fromRGB(255, 215, 80)
+		slot.BackgroundTransparency = 0.3
+		slot.BorderSizePixel = 0
+		slot.LayoutOrder = i
+		slot.Parent = skillContainer
+
+		local sCorner = Instance.new("UICorner")
+		sCorner.CornerRadius = UDim.new(0, 6)
+		sCorner.Parent = slot
+
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.new(1, 0, 1, 0)
+		label.BackgroundTransparency = 1
+		label.Text = skillDisplayTable[i] or ""
+		label.TextColor3 = Color3.fromRGB(255, 255, 255)
+		label.TextSize = 14
+		label.Font = Enum.Font.GothamBold
+		label.TextScaled = true
+		label.Parent = slot
+
+		local idx = i
+		local btn = Instance.new("TextButton")
+		btn.Size = UDim2.new(1, 0, 1, 0)
+		btn.BackgroundTransparency = 1
+		btn.Text = ""
+		btn.Parent = slot
+		btn.MouseButton1Click:Connect(function()
+			if selectedSkill == idx then
+				selectedSkill = nil
+			else
+				selectedSkill = idx
+			end
+			updateSelection()
+		end)
+
+		skillSlots[i] = slot
+	end
+end
+
 local function startNewQuestion()
 	local floorNum = currentFloor
+	local dataController = Knit.GetController("PlayerDataController")
+	local playerData = dataController:GetData()
+
 	if not floorNum then
-		local dataController = Knit.GetController("PlayerDataController")
-		local playerData = dataController:GetData()
 		floorNum = (playerData and playerData.Floor) or 1
 		currentFloor = floorNum
 	end
+
+	local hand = playerData and playerData.SkillHand or { 1, 10, 20, 29 }
+	skillDisplayTable = {}
+	skillApplyTable = {}
+	for _, idx in hand do
+		local card = SkillCarks.All[idx]
+		if card then
+			table.insert(skillDisplayTable, card.display)
+			table.insert(skillApplyTable, card.apply)
+		end
+	end
+
+	if #skillDisplayTable == 0 then
+		for _, idx in { 1, 10, 20, 29 } do
+			local card = SkillCarks.All[idx]
+			if card then
+				table.insert(skillDisplayTable, card.display)
+				table.insert(skillApplyTable, card.apply)
+			end
+		end
+	end
+
+	buildSkillSlots()
 	if not Questions or #Questions == 0 then
 		return
 	end
@@ -275,7 +360,7 @@ local function createUI()
 
 	panel = Instance.new("Frame")
 	panel.Name = "QuestionPanel"
-	panel.Size = UDim2.fromOffset(560, 420)
+	panel.Size = UDim2.fromOffset(560, 450)
 	panel.Position = UDim2.new(0.5, -280, 0.5, -210)
 	panel.BackgroundColor3 = Color3.fromRGB(18, 18, 34)
 	panel.BackgroundTransparency = 0.1
@@ -379,50 +464,21 @@ local function createUI()
 	skillLabel.TextXAlignment = Enum.TextXAlignment.Left
 	skillLabel.Parent = panel
 
-	skillSlots = {}
-	local SKILL_W = 60
-	local SKILL_GAP = 12
-	local skillStartX = startX
-	for i = 1, 4 do
-		local slot = Instance.new("Frame")
-		slot.Name = "SkillSlot_" .. i
-		slot.Size = UDim2.fromOffset(SKILL_W, 36)
-		slot.Position = UDim2.fromOffset(skillStartX + (i - 1) * (SKILL_W + SKILL_GAP), SKILL_Y)
-		slot.BackgroundColor3 = Color3.fromRGB(255, 215, 80)
-		slot.BackgroundTransparency = 0.3
-		slot.BorderSizePixel = 0
-		slot.Parent = panel
+	skillContainer = Instance.new("Frame")
+	skillContainer.Size = UDim2.new(1, -(startX * 2 + 104), 0, 36)
+	skillContainer.Position = UDim2.fromOffset(startX + 104, SKILL_Y)
+	skillContainer.BackgroundTransparency = 1
+	skillContainer.BorderSizePixel = 0
+	skillContainer.Parent = panel
 
-		local sCorner = Instance.new("UICorner")
-		sCorner.CornerRadius = UDim.new(0, 6)
-		sCorner.Parent = slot
+	local skillLayout = Instance.new("UIListLayout")
+	skillLayout.FillDirection = Enum.FillDirection.Horizontal
+	skillLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+	skillLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	skillLayout.Padding = UDim.new(0, 6)
+	skillLayout.Parent = skillContainer
 
-		local label = Instance.new("TextLabel")
-		label.Size = UDim2.new(1, 0, 1, 0)
-		label.BackgroundTransparency = 1
-		label.Text = SKILL_DISPLAY[i]
-		label.TextColor3 = Color3.fromRGB(255, 255, 255)
-		label.TextSize = 16
-		label.Font = Enum.Font.GothamBold
-		label.Parent = slot
-
-		local idx = i
-		local btn = Instance.new("TextButton")
-		btn.Size = UDim2.new(1, 0, 1, 0)
-		btn.BackgroundTransparency = 1
-		btn.Text = ""
-		btn.Parent = slot
-		btn.MouseButton1Click:Connect(function()
-			if selectedSkill == idx then
-				selectedSkill = nil
-			else
-				selectedSkill = idx
-			end
-			updateSelection()
-		end)
-
-		skillSlots[i] = slot
-	end
+	buildSkillSlots()
 
 	-- Result text (above buttons, left-aligned)
 	resultFrame = Instance.new("Frame")
@@ -488,8 +544,8 @@ local function createUI()
 	commentList.Parent = commentScroll
 
 	local commentInputBg = Instance.new("Frame")
-	commentInputBg.Size = UDim2.new(1, -(startX * 2 + 4), 0, 28)
-	commentInputBg.Position = UDim2.fromOffset(startX, 342)
+	commentInputBg.Size = UDim2.new(1, -(startX * 2 + 4), 0, 34)
+	commentInputBg.Position = UDim2.fromOffset(startX, 354)
 	commentInputBg.BackgroundColor3 = Color3.fromRGB(22, 22, 40)
 	commentInputBg.BackgroundTransparency = 0.3
 	commentInputBg.BorderSizePixel = 0
@@ -500,8 +556,8 @@ local function createUI()
 	ciCorner.Parent = commentInputBg
 
 	commentInput = Instance.new("TextBox")
-	commentInput.Size = UDim2.new(1, -52, 1, -2)
-	commentInput.Position = UDim2.fromOffset(4, 1)
+	commentInput.Size = UDim2.new(1, -52, 1, -8)
+	commentInput.Position = UDim2.fromOffset(4, 4)
 	commentInput.BackgroundTransparency = 1
 	commentInput.PlaceholderText = "输入评论..."
 	commentInput.PlaceholderColor3 = Color3.fromRGB(120, 120, 150)

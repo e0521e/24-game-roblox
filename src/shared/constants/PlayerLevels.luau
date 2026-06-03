@@ -7,6 +7,7 @@ local PlayerLevels = {
 		SignInDayRequired = 0,
 		AutoRange = 0,
 		AutoFireCooldown = 0,
+		SkillSlots = 4,
 	},
 	[2] = {
 		Name = "VIP",
@@ -16,6 +17,7 @@ local PlayerLevels = {
 		SignInDayRequired = 2,
 		AutoRange = 50,
 		AutoFireCooldown = 0.5,
+		SkillSlots = 6,
 	},
 	[3] = {
 		Name = "SVIP",
@@ -25,6 +27,7 @@ local PlayerLevels = {
 		SignInDayRequired = 7,
 		AutoRange = 80,
 		AutoFireCooldown = 0.3,
+		SkillSlots = 10,
 	},
 }
 

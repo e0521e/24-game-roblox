@@ -7,6 +7,8 @@ local Knit = U3.Knit
 local PlayerDataModule = require(ReplicatedStorage.Shared.DataStructures.PlayerData)
 local OnlineRewards = require(ReplicatedStorage.Shared.constants.OnlineRewards)
 local SignInConfig = require(ReplicatedStorage.Shared.constants.SignInConfig)
+local SkillCarks = require(ReplicatedStorage.Shared.constants.SkillCarks)
+local PlayerLevels = require(ReplicatedStorage.Shared.constants.PlayerLevels)
 
 local DATASTORE_NAME = "PlayerData_24Game"
 local AUTOSAVE_INTERVAL = 60
@@ -25,19 +27,19 @@ local dataStore = DataStoreService:GetDataStore(DATASTORE_NAME)
 local playerDataMap = {}
 local playerClaimedRewards = {}
 
-function PlayerDataService.Client:ClaimDailySignIn(player)
+function PlayerDataService.Client:ClaimDailySignIn(player, day)
 	local data = playerDataMap[player.UserId]
 	if not data then
 		return false
 	end
-	if not PlayerDataModule.CanSignIn(data.SignInData) then
+
+	if not PlayerDataModule.CanClaimDay(data.SignInData, day, data.FirstJoinTime) then
 		return false
 	end
 
-	data.SignInData = PlayerDataModule.ProcessSignIn(data.SignInData)
-	local day = data.SignInData.TotalSignInDays
-	local config = SignInConfig[day]
+	table.insert(data.SignInData.ClaimedDays, day)
 
+	local config = SignInConfig[day]
 	if config then
 		if config.Coins then
 			data.Coins = math.max(0, data.Coins + config.Coins)
@@ -47,6 +49,40 @@ function PlayerDataService.Client:ClaimDailySignIn(player)
 		end
 	end
 
+	PlayerDataService.Client.DataChanged:Fire(player, data)
+	return true
+end
+
+function PlayerDataService.Client:SaveSkillHand(player, skillIndices)
+	local data = playerDataMap[player.UserId]
+	if not data then
+		return false
+	end
+
+	if type(skillIndices) ~= "table" then
+		return false
+	end
+
+	local level = data.PlayerLevel or 1
+	local levelCfg = PlayerLevels[level]
+	local maxSlots = levelCfg and levelCfg.SkillSlots or 4
+
+	if #skillIndices > maxSlots then
+		return false
+	end
+
+	local seen = {}
+	for _, idx in skillIndices do
+		if type(idx) ~= "number" or idx < 1 or idx > #SkillCarks.All then
+			return false
+		end
+		if seen[idx] then
+			return false
+		end
+		seen[idx] = true
+	end
+
+	data.SkillHand = skillIndices
 	PlayerDataService.Client.DataChanged:Fire(player, data)
 	return true
 end
@@ -131,10 +167,25 @@ function PlayerDataService:LoadPlayerData(player)
 			data.PlayerLevel = 1
 		end
 		if not data.SignInData then
-			data.SignInData = { LastSignInDate = "", TotalSignInDays = 0 }
-		elseif data.SignInData.ConsecutiveDays then
-			data.SignInData.TotalSignInDays = data.SignInData.ConsecutiveDays
-			data.SignInData.ConsecutiveDays = nil
+			data.SignInData = { ClaimedDays = {} }
+		elseif not data.SignInData.ClaimedDays then
+			local totalDays = data.SignInData.TotalSignInDays or data.SignInData.ConsecutiveDays or 0
+			local claimed = {}
+			for i = 1, totalDays do
+				table.insert(claimed, i)
+			end
+			data.SignInData = { ClaimedDays = claimed }
+		end
+		if not data.SkillHand or type(data.SkillHand) ~= "table" or #data.SkillHand == 0 then
+			local lv = data.PlayerLevel or 1
+			local cfg = PlayerLevels[lv]
+			local slots = cfg and cfg.SkillSlots or 4
+			local defaultIndices = { 1, 10, 20, 29 }
+			local hand = {}
+			for i = 1, math.min(slots, #defaultIndices) do
+				table.insert(hand, defaultIndices[i])
+			end
+			data.SkillHand = hand
 		end
 		return data
 	end

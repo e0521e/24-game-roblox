@@ -8,6 +8,7 @@ local Knit = U3.Knit
 local OnlineRewards = require(ReplicatedStorage.Shared.constants.OnlineRewards)
 local SignInConfig = require(ReplicatedStorage.Shared.constants.SignInConfig)
 local PlayerLevels = require(ReplicatedStorage.Shared.constants.PlayerLevels)
+local PlayerDataModule = require(ReplicatedStorage.Shared.DataStructures.PlayerData)
 
 local PlayerDataController = Knit.CreateController {
 	Name = "PlayerDataController",
@@ -50,6 +51,61 @@ local function formatTime(seconds)
 		return string.format("%d分钟", m)
 	end
 	return string.format("%d分%d秒", m, s)
+end
+
+local nameTagGui
+
+local function refreshNameTag()
+	local data = cachedData
+	local level = data and data.PlayerLevel or 1
+	local levelCfg = PlayerLevels[level]
+	local prefix = ""
+	if level > 1 and levelCfg then
+		prefix = levelCfg.Emoji .. " "
+	end
+	local displayText = prefix .. player.Name
+	if nameTagGui then
+		local label = nameTagGui:FindFirstChildOfClass("TextLabel")
+		if label then
+			label.Text = displayText
+			if levelCfg and level > 1 then
+				label.TextColor3 = levelCfg.Color
+			end
+		end
+	end
+end
+
+local function createNameTag(char)
+	local head = char:FindFirstChild("Head")
+	if not head then
+		return
+	end
+
+	local old = head:FindFirstChild("NameTag")
+	if old then
+		old:Destroy()
+	end
+
+	local bg = Instance.new("BillboardGui")
+	bg.Name = "NameTag"
+	bg.Size = UDim2.fromOffset(200, 30)
+	bg.Adornee = head
+	bg.StudsOffset = Vector3.new(0, 2.5, 0)
+	bg.AlwaysOnTop = true
+	bg.Parent = head
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, 0, 1, 0)
+	label.BackgroundTransparency = 1
+	label.Text = player.Name
+	label.TextColor3 = Color3.fromRGB(255, 255, 255)
+	label.TextSize = 18
+	label.Font = Enum.Font.GothamBold
+	label.TextStrokeTransparency = 0.4
+	label.Parent = bg
+
+	nameTagGui = bg
+	refreshNameTag()
 end
 
 local function showCoinFloater(amount)
@@ -114,7 +170,7 @@ local gmPanelOpen = false
 local gmPanel, gmTextBox, gmResult
 
 local signInPanelOpen = false
-local signInPanel, signInBtn, signInDaySlots = nil, nil, {}
+local signInPanel, signInDaySlots = nil, {}
 local signInStatusLabel, signInLevelLabel
 
 local function toggleGMPanel()
@@ -129,8 +185,19 @@ local function refreshSignInPanel()
 
 	local data = cachedData
 	local signInData = data and data.SignInData
-	local totalDays = signInData and signInData.TotalSignInDays or 0
-	local canSign = signInData and (signInData.LastSignInDate ~= os.date("%Y%m%d") and totalDays < 7)
+	local claimedDays = signInData and signInData.ClaimedDays or {}
+	local firstJoin = data and data.FirstJoinTime or os.time()
+	local daysSinceJoin = PlayerDataModule.GetDaysSinceJoin(firstJoin)
+	local maxAvailable = math.min(daysSinceJoin, 7)
+
+	local function isClaimed(day)
+		for _, d in claimedDays do
+			if d == day then
+				return true
+			end
+		end
+		return false
+	end
 
 	local level = data and data.PlayerLevel or 1
 	local levelCfg = PlayerLevels[level]
@@ -142,24 +209,28 @@ local function refreshSignInPanel()
 		signInLevelLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 	end
 
+	local claimedCount = #claimedDays
+	signInStatusLabel.Text = "已签到 " .. claimedCount .. " 天" .. "  |  当前可签第 " .. maxAvailable .. " 天"
+	signInStatusLabel.TextColor3 = Color3.fromRGB(255, 215, 80)
+
 	for day = 1, 7 do
 		local slot = signInDaySlots[day]
 		if slot then
-			local isSigned = day <= totalDays
-			local isToday = day == totalDays + 1
+			local claimed = isClaimed(day)
+			local available = day <= maxAvailable
 
-			if isSigned then
-				slot.cell.BackgroundColor3 = Color3.fromRGB(255, 215, 80)
+			if claimed then
+				slot.cell.BackgroundColor3 = Color3.fromRGB(100, 200, 120)
 				slot.cell.BackgroundTransparency = 0.6
 				slot.dayLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 				slot.coinLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 				slot.statusIcon.Text = "✅"
 				slot.statusIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
-			elseif isToday then
-				slot.cell.BackgroundColor3 = Color3.fromRGB(60, 80, 255)
-				slot.cell.BackgroundTransparency = 0.4
+			elseif available then
+				slot.cell.BackgroundColor3 = Color3.fromRGB(255, 200, 50)
+				slot.cell.BackgroundTransparency = 0.3
 				slot.dayLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-				slot.coinLabel.TextColor3 = Color3.fromRGB(255, 215, 80)
+				slot.coinLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 				slot.statusIcon.Text = "🎁"
 				slot.statusIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
 			else
@@ -171,32 +242,6 @@ local function refreshSignInPanel()
 				slot.statusIcon.TextColor3 = Color3.fromRGB(80, 80, 100)
 			end
 		end
-	end
-
-	if canSign then
-		signInBtn.BackgroundColor3 = Color3.fromRGB(255, 200, 50)
-		signInBtn.BackgroundTransparency = 0.1
-		signInBtn.Text = "签到 第" .. (totalDays + 1) .. "天"
-		signInBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-		signInBtn.Active = true
-		signInStatusLabel.Text = "今日可签到！"
-		signInStatusLabel.TextColor3 = Color3.fromRGB(255, 215, 80)
-	elseif totalDays >= 7 then
-		signInBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 100)
-		signInBtn.BackgroundTransparency = 0.3
-		signInBtn.Text = "签到完成"
-		signInBtn.TextColor3 = Color3.fromRGB(180, 180, 200)
-		signInBtn.Active = false
-		signInStatusLabel.Text = "已累计签到 " .. totalDays .. " 天，全部领取完毕！"
-		signInStatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-	else
-		signInBtn.BackgroundColor3 = Color3.fromRGB(120, 120, 140)
-		signInBtn.BackgroundTransparency = 0.5
-		signInBtn.Text = "今日已签到"
-		signInBtn.TextColor3 = Color3.fromRGB(160, 160, 180)
-		signInBtn.Active = false
-		signInStatusLabel.Text = "今日已完成签到，明天再来吧！"
-		signInStatusLabel.TextColor3 = Color3.fromRGB(180, 180, 200)
 	end
 end
 
@@ -270,9 +315,37 @@ local function createGMPanel(guiParent)
 	boxCorner.CornerRadius = UDim.new(0, 6)
 	boxCorner.Parent = gmTextBox
 
+	local printBtn = Instance.new("TextButton")
+	printBtn.Name = "PrintBtn"
+	printBtn.Size = UDim2.fromOffset(88, 32)
+	printBtn.Position = UDim2.fromOffset(58, 164)
+	printBtn.BackgroundColor3 = Color3.fromRGB(100, 160, 255)
+	printBtn.BackgroundTransparency = 0.2
+	printBtn.BorderSizePixel = 0
+	printBtn.Text = "打印"
+	printBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	printBtn.TextSize = 16
+	printBtn.Font = Enum.Font.GothamBold
+	printBtn.Parent = bg
+
+	local pCorner = Instance.new("UICorner")
+	pCorner.CornerRadius = UDim.new(0, 6)
+	pCorner.Parent = printBtn
+
+	printBtn.MouseButton1Click:Connect(function()
+		local dataController = Knit.GetController("PlayerDataController")
+		local data = dataController and dataController:GetData()
+		if data then
+			print("[GM] PlayerData:", HttpService:JSONEncode(data))
+		else
+			print("[GM] No cached player data")
+		end
+	end)
+
 	local modifyBtn = Instance.new("TextButton")
-	modifyBtn.Size = UDim2.fromOffset(100, 32)
-	modifyBtn.Position = UDim2.new(0.5, -50, 1, -44)
+	modifyBtn.Name = "ModifyBtn"
+	modifyBtn.Size = UDim2.fromOffset(88, 32)
+	modifyBtn.Position = UDim2.fromOffset(154, 164)
 	modifyBtn.BackgroundColor3 = Color3.fromRGB(255, 200, 50)
 	modifyBtn.BackgroundTransparency = 0.2
 	modifyBtn.BorderSizePixel = 0
@@ -484,11 +557,33 @@ local function createSignInPanel(guiParent)
 		statusIcon.Font = Enum.Font.GothamBold
 		statusIcon.Parent = cell
 
+		local claimBtn = Instance.new("TextButton")
+		claimBtn.Size = UDim2.new(1, 0, 1, 0)
+		claimBtn.BackgroundTransparency = 1
+		claimBtn.Text = ""
+		claimBtn.Parent = cell
+		local claimDay = day
+		claimBtn.MouseButton1Click:Connect(function()
+			local data = cachedData
+			if not data then
+				return
+			end
+			if not PlayerDataModule.CanClaimDay(data.SignInData, claimDay, data.FirstJoinTime) then
+				return
+			end
+			local service = Knit.GetService("PlayerDataService")
+			local ok = service:ClaimDailySignIn(claimDay)
+			if ok then
+				refreshSignInPanel()
+			end
+		end)
+
 		signInDaySlots[day] = {
 			cell = cell,
 			dayLabel = dayLabel,
 			coinLabel = coinLabel,
 			statusIcon = statusIcon,
+			claimBtn = claimBtn,
 		}
 	end
 
@@ -502,30 +597,6 @@ local function createSignInPanel(guiParent)
 	signInStatusLabel.Font = Enum.Font.GothamBold
 	signInStatusLabel.TextXAlignment = Enum.TextXAlignment.Center
 	signInStatusLabel.Parent = bg
-
-	signInBtn = Instance.new("TextButton")
-	signInBtn.Size = UDim2.fromOffset(260, 44)
-	signInBtn.Position = UDim2.new(0.5, -130, 1, -56)
-	signInBtn.BackgroundColor3 = Color3.fromRGB(255, 200, 50)
-	signInBtn.BackgroundTransparency = 0.2
-	signInBtn.BorderSizePixel = 0
-	signInBtn.Text = "签到"
-	signInBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	signInBtn.TextSize = 20
-	signInBtn.Font = Enum.Font.GothamBold
-	signInBtn.Parent = bg
-
-	local sCorner = Instance.new("UICorner")
-	sCorner.CornerRadius = UDim.new(0, 10)
-	sCorner.Parent = signInBtn
-
-	signInBtn.MouseButton1Click:Connect(function()
-		local service = Knit.GetService("PlayerDataService")
-		local ok = service:ClaimDailySignIn()
-		if ok then
-			refreshSignInPanel()
-		end
-	end)
 
 	refreshSignInPanel()
 	signInPanel = bg
@@ -879,18 +950,28 @@ function PlayerDataController:KnitStart()
 
 	createSignInPanel(signInGui)
 
+	player.CharacterAdded:Connect(function(char)
+		createNameTag(char)
+	end)
+	if player.Character then
+		createNameTag(player.Character)
+	end
+
 	local service = Knit.GetService("PlayerDataService")
 	service.GetData:Connect(function(data)
 		cachedData = data
 		prevCoins = data.Coins
 		updateHUD(data)
 		refreshSignInPanel()
+		refreshNameTag()
 	end)
 	service.DataChanged:Connect(function(data)
+		cachedData = data
 		local diff = data.Coins - prevCoins
 		prevCoins = data.Coins
 		updateHUD(data)
 		refreshSignInPanel()
+		refreshNameTag()
 		if diff > 0 then
 			task.spawn(showCoinFloater, diff)
 			task.spawn(showHUDFloater, diff)
@@ -908,9 +989,9 @@ function PlayerDataController:GetData()
 	return cachedData
 end
 
-function PlayerDataController:ClaimDailySignIn()
+function PlayerDataController:ClaimDailySignIn(day)
 	local service = Knit.GetService("PlayerDataService")
-	return service:ClaimDailySignIn()
+	return service:ClaimDailySignIn(day)
 end
 
 return PlayerDataController

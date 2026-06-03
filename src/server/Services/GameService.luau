@@ -4,6 +4,7 @@ local Players = game:GetService("Players")
 local U3 = require(ReplicatedStorage.Shared.DataStructures.U3)
 local Knit = U3.Knit
 local Questions = require(ReplicatedStorage.Shared.constants.Questions)
+local SkillCarks = require(ReplicatedStorage.Shared.constants.SkillCarks)
 
 local GameService = Knit.CreateService {
 	Name = "GameService",
@@ -25,13 +26,6 @@ function GameService.Client:StartQuestion(player)
 	return data.Floor
 end
 
-local SKILLS = {
-	{ name = "+1", apply = function(v) return v + 1 end },
-	{ name = "-1", apply = function(v) return v - 1 end },
-	{ name = "*2", apply = function(v) return v * 2 end },
-	{ name = "/2", apply = function(v) return math.floor(v / 2) end },
-}
-
 function GameService.Client:SubmitAnswer(player, cardIndex, skillIndex)
 	print("SubmitAnswer", player.Name, "card", cardIndex, "skill", skillIndex)
 	local data = playerService:GetData(player)
@@ -47,6 +41,8 @@ function GameService.Client:SubmitAnswer(player, cardIndex, skillIndex)
 		return false, "no question"
 	end
 
+	local hand = data.SkillHand or { 1, 10, 20, 29 }
+
 	local nums = {}
 	for _, n in question.numbers do
 		table.insert(nums, n)
@@ -57,13 +53,17 @@ function GameService.Client:SubmitAnswer(player, cardIndex, skillIndex)
 		if cardIndex < 1 or cardIndex > #nums then
 			return false, "invalid card"
 		end
-		local skill = SKILLS[skillIndex]
+		if skillIndex < 1 or skillIndex > #hand then
+			return false, "invalid skill"
+		end
+		local cardIdx = hand[skillIndex]
+		local skill = SkillCarks.All[cardIdx]
 		if not skill then
 			return false, "invalid skill"
 		end
 		local old = nums[cardIndex]
 		nums[cardIndex] = skill.apply(nums[cardIndex])
-		print("SubmitAnswer: applied", skill.name, "on index", cardIndex, old, "->", nums[cardIndex])
+		print("SubmitAnswer: applied", skill.display, "on index", cardIndex, old, "->", nums[cardIndex])
 	end
 
 	local total = 0
